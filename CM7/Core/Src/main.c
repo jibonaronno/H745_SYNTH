@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
+#include <string.h>
+#include <stdarg.h> //for va_list var arg functions
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,12 +48,15 @@
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 
+TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
+
 UART_HandleTypeDef huart3;
 
 PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 /* USER CODE BEGIN PV */
-
+UART_HandleTypeDef hlpuart1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -59,12 +64,135 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
-
+void myprintf(const char *fmt, ...);
+static void MX_LPUART1_UART_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void myprintf(const char *fmt, ...) {
+  static char buffer[200];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buffer, sizeof(buffer), fmt, args);
+  va_end(args);
+
+  int len = strlen(buffer);
+  HAL_UART_Transmit(&huart3, (uint8_t*)buffer, len, -1);
+
+}
+
+char writeBuf[100];
+
+char strA1[50];
+volatile uint16_t ad1_raw[5];
+const int adcChannelCount = 2;
+volatile int adcConversionComplete = 0;
+volatile uint32_t millis = 0;
+volatile uint32_t conv_rate = 0;
+
+uint32_t ad1 = 0;
+uint32_t ad2 = 0;
+
+int32_t sawtooth_buf[10];
+int gidxA = 0;
+
+void insert_new_value(int32_t *buf, int32_t new_value)
+{
+	for(gidxA=0;gidxA<9;gidxA++)
+	{
+		buf[gidxA] = buf[gidxA+1];
+	}
+
+	buf[9] = new_value;
+}
+
+int flag_FallingEdge = 0;
+int flag_saving = 0;
+
+int file_name_index = 0;
+
+int log_file_opened = 0;
+
+int getSimplifiedSlope(int32_t *buf)
+{
+	int32_t avg1 = (buf[0] + buf[1] + buf[2] + buf[3] + buf[4]) / 5;
+	int32_t avg2 = (buf[5] + buf[6] + buf[7] + buf[8] + buf[9]) / 5;
+
+	if((avg1 - avg2) > 1000)
+	{
+		return 1;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+void DMA_ADC_Complete(DMA_HandleTypeDef *_hdma)
+{
+
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	adcConversionComplete = 1;
+	ad1 = HAL_ADC_GetValue(&hadc1);
+	ad2 = HAL_ADC_GetValue(&hadc1);
+	conv_rate++;
+
+	insert_new_value(sawtooth_buf, (int32_t)ad1);
+	//HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ad1_raw, adcChannelCount);
+	if(flag_saving == 1)
+	{
+		;//keepWriting(&log_file, (int)ad1);
+	}
+}
+
+uint32_t crate = 0;
+
+uint32_t __t2_cntr = 0;
+uint32_t __dripA = 0;
+uint32_t flag_saving_interval = 0;
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim == &htim4)
+	{
+		if(__t2_cntr < 3)
+		{
+			__t2_cntr++;
+		}
+		else
+		{
+			__t2_cntr = 0;
+		}
+
+		if(__dripA > 0)
+		{
+			__dripA++;
+
+			if(__dripA > 1500) // 500uS
+			{
+				flag_FallingEdge = 0;
+				__dripA = 0;
+			}
+		}
+
+		if(flag_saving_interval > 0)
+		{
+			if(flag_saving_interval == 1)
+			{
+				; //endWriting(&log_file);
+			}
+			flag_saving_interval--;
+		}
+	}
+}
 
 /* USER CODE END 0 */
 
@@ -127,6 +255,8 @@ Error_Handler();
   MX_GPIO_Init();
   MX_USB_OTG_FS_PCD_Init();
   MX_USART3_UART_Init();
+  MX_TIM3_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -278,6 +408,96 @@ void MX_ADC1_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 128;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 6;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 16;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+
+}
+
+/**
   * @brief USART3 Initialization Function
   * @param None
   * @retval None
@@ -382,6 +602,133 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+/**
+  * @brief LPUART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_LPUART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN LPUART1_Init 0 */
+
+  /* USER CODE END LPUART1_Init 0 */
+
+  /* USER CODE BEGIN LPUART1_Init 1 */
+
+  /* USER CODE END LPUART1_Init 1 */
+  hlpuart1.Instance = LPUART1;
+  hlpuart1.Init.BaudRate = 115200;
+  hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
+  hlpuart1.Init.StopBits = UART_STOPBITS_1;
+  hlpuart1.Init.Parity = UART_PARITY_NONE;
+  hlpuart1.Init.Mode = UART_MODE_TX_RX;
+  hlpuart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  hlpuart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  hlpuart1.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  hlpuart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  hlpuart1.FifoMode = UART_FIFOMODE_DISABLE;
+  if (HAL_UART_Init(&hlpuart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetTxFifoThreshold(&hlpuart1, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_SetRxFifoThreshold(&hlpuart1, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_UARTEx_DisableFifoMode(&hlpuart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN LPUART1_Init 2 */
+
+  /* USER CODE END LPUART1_Init 2 */
+
+}
+uint16_t period_signal[100] = {0};
+static void TransferDataADC(void)
+{
+  uint16_t tmpMaxData=BUFFER_SIZE;
+
+  RTC_DateTypeDef _date;
+  RTC_TimeTypeDef _time;
+
+  HAL_RTC_GetTime(&hrtc, &_time, RTC_FORMAT_BCD);
+  HAL_RTC_GetDate(&hrtc, &_date, RTC_FORMAT_BCD);
+
+#if !USE_FOR_LORA
+  /* transfer raw data ADC */
+   for(int i= 0;i<tmpMaxData;++i){
+     // sprintf(str,"%d",PA6_Data[i]);
+     temp = PA6_Data[i] >>8;
+     HAL_UART_Transmit(&hlpuart1, &PA6_Data[i] , 1, -1);
+     HAL_UART_Transmit(&hlpuart1, &temp, 1, -1);
+     // myprintf("%d\n",PA6_Data[i]);
+     //HAL_Delay(50);
+   }
+    // HAL_UART_Transmit(&hlpuart1, ';', 1, -1);
+#else
+       /* find period each cycles */
+  for(int i= 1;i<=iPeak;++i){
+      period_signal[i-1] = located_fallEdge[i] - located_fallEdge[i-1];
+      // HAL_UART_Transmit(&hlpuart1, &period_signal[i-1] , 1, -1);
+      // temp = period_signal[i-1] >>8;
+      // HAL_UART_Transmit(&hlpuart1, &temp, 1, -1);
+  }
+
+  /* transfer peak data & cycles */
+  for(int i= 0;i<iPeak;++i){
+      // sprintf(str,"%d",PA6_Data[i]);
+
+      temp = dataPeak[i] >>8;
+      HAL_UART_Transmit(&hlpuart1, &dataPeak[i] , 1, 500);
+      HAL_UART_Transmit(&hlpuart1, &temp, 1, 500);
+      /* transfer location of peak in each cycles */
+      HAL_UART_Transmit(&hlpuart1, &located_peak[i] , 1, 500);
+      temp = located_peak[i] >>8;
+      HAL_UART_Transmit(&hlpuart1, &temp, 1, 500);
+      /* transfer period of each cycles */
+      HAL_UART_Transmit(&hlpuart1, &period_signal[i] , 1, 500);
+      temp = period_signal[i] >>8;
+      HAL_UART_Transmit(&hlpuart1, &temp, 1, 500);
+
+      // myprintf("%d\n",PA6_Data[i]);
+      //HAL_Delay(50);
+    }
+
+
+
+
+    // temp = ';';
+    // HAL_UART_Transmit(&hlpuart1, &temp, 1, -1);
+    // HAL_UART_Transmit(&hlpuart1, &temp, 1, -1);
+
+     /* transfer timestamp */
+  	 HAL_UART_Transmit(&hlpuart1, &_time.Seconds , 1, -1);
+  	 HAL_UART_Transmit(&hlpuart1, &_time.Minutes , 1, -1);
+     HAL_UART_Transmit(&hlpuart1, &_time.Hours , 1, -1);
+     HAL_UART_Transmit(&hlpuart1, &_date.Date , 1, -1);
+    // HAL_UART_Transmit(&hlpuart1, &_date.Month , 1, -1);
+    // HAL_UART_Transmit(&hlpuart1, &_date.Date , 1, -1);
+
+     /* transfer End of data Number */
+     temp = 0xAA;
+     HAL_UART_Transmit(&hlpuart1, &temp , 1, -1);
+     HAL_UART_Transmit(&hlpuart1, &temp , 1, -1);
+#endif
+    /* clear buffer */
+    for(int i= 0;i<iPeak;++i){
+      dataPeak[i] = 0;
+      located_peak[i] = 0;
+      located_fallEdge[i] = 0;
+    }
+
+
+}
 
 /* USER CODE END 4 */
 
