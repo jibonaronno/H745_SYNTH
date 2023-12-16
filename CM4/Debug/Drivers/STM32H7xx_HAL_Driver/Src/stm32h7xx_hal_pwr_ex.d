@@ -1,5 +1,5 @@
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr_ex.o: \
- C:/Users/TK/STM32CubeIDE/workspace_1.13.0/H745_SYNTH/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr_ex.c \
+ C:/Users/haque/STM32CubeIDE/workspace_1.14.1/H745_SYNTH/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr_ex.c \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
  ../Core/Inc/stm32h7xx_hal_conf.h \
  ../../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h \
