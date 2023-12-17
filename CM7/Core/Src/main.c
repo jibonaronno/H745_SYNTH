@@ -74,6 +74,7 @@ UART_HandleTypeDef hlpuart1;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void PeriphCommonClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 static void MX_USART3_UART_Init(void);
@@ -188,8 +189,15 @@ uint32_t __t2_cntr = 0;
 uint32_t __dripA = 0;
 uint32_t flag_saving_interval = 0;
 
+uint32_t __t3_counter = 0;
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
+	if(htim == &htim3)
+	{
+		__t3_counter++;
+	}
+
 	if(htim == &htim4)
 	{
 		if(__t2_cntr < 3)
@@ -258,6 +266,9 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
+
+/* Configure the peripherals common clocks */
+  PeriphCommonClock_Config();
 /* USER CODE BEGIN Boot_Mode_Sequence_2 */
 /* When system initialization is finished, Cortex-M7 will release Cortex-M4 by means of
 HSEM notification */
@@ -290,6 +301,10 @@ Error_Handler();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
 
+  myprintf("INIT STARTUP...\r\n\r\n\r\n");
+  HAL_TIM_Base_Start_IT(&htim3);
+  //HAL_TIM_Base_Start(&htim4);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -300,8 +315,14 @@ Error_Handler();
 
     /* USER CODE BEGIN 3 */
 	  HAL_Delay(1000);
-	  HAL_UART_Transmit(&huart3, "ADC1 : \r\n", 9, -1); // 4th param need -1
-	  HAL_UART_Transmit(&hlpuart1, "ADC0 : \r\n", 9, -1);
+
+	  //HAL_UART_Transmit(&huart3, "ADC1 : \r\n", 9, -1); // 4th param need -1
+	  //HAL_UART_Transmit(&hlpuart1, "ADC0 : \r\n", 9, -1);
+	  myprintf("conv_rate : %d\r\n", conv_rate);
+	  conv_rate = 0;
+
+	  myprintf("t3 rate : %d\r\n", __t3_counter);
+	  __t3_counter = 0;
   }
   /* USER CODE END 3 */
 }
@@ -366,6 +387,33 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief Peripherals Common Clock Configuration
+  * @retval None
+  */
+void PeriphCommonClock_Config(void)
+{
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+
+  /** Initializes the peripherals clock
+  */
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USB|RCC_PERIPHCLK_ADC;
+  PeriphClkInitStruct.PLL3.PLL3M = 1;
+  PeriphClkInitStruct.PLL3.PLL3N = 18;
+  PeriphClkInitStruct.PLL3.PLL3P = 2;
+  PeriphClkInitStruct.PLL3.PLL3Q = 3;
+  PeriphClkInitStruct.PLL3.PLL3R = 2;
+  PeriphClkInitStruct.PLL3.PLL3RGE = RCC_PLL3VCIRANGE_3;
+  PeriphClkInitStruct.PLL3.PLL3VCOSEL = RCC_PLL3VCOMEDIUM;
+  PeriphClkInitStruct.PLL3.PLL3FRACN = 6144;
+  PeriphClkInitStruct.UsbClockSelection = RCC_USBCLKSOURCE_PLL3;
+  PeriphClkInitStruct.AdcClockSelection = RCC_ADCCLKSOURCE_PLL3;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
   * @brief ADC1 Initialization Function
   * @param None
   * @retval None
@@ -387,7 +435,7 @@ void MX_ADC1_Init(void)
   /** Common config
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV2;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV16;
   hadc1.Init.Resolution = ADC_RESOLUTION_14B;
   hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
@@ -395,7 +443,7 @@ void MX_ADC1_Init(void)
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 2;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T3_TRGO;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T4_TRGO;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc1.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
@@ -628,7 +676,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 64;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 128;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -673,9 +721,9 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 1 */
   htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 6;
+  htim4.Init.Prescaler = 32;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 16;
+  htim4.Init.Period = 32;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
@@ -687,7 +735,7 @@ static void MX_TIM4_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
   {
