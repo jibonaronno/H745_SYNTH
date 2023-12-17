@@ -300,7 +300,7 @@ Error_Handler();
 
     /* USER CODE BEGIN 3 */
 	  HAL_Delay(1000);
-	  HAL_UART_Transmit(&huart3, "ADC1 : \r\n", 9, -1);
+	  HAL_UART_Transmit(&huart3, "ADC1 : \r\n", 9, -1); // 4th param need -1
 	  HAL_UART_Transmit(&hlpuart1, "ADC0 : \r\n", 9, -1);
   }
   /* USER CODE END 3 */
